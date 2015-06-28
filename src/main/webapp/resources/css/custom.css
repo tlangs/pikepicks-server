@@ -1,0 +1,17 @@
+.button-header {
+    margin-top: 0px;
+    margin-bottom: 0px;
+}
+
+.resume-list > li {
+    display: inline;
+    margin-right: 1em;
+}
+
+.resume-subcategory {
+    margin: 0 -1em 0 1em;
+}
+
+.resume-description {
+    margin-left: 2em;
+}
