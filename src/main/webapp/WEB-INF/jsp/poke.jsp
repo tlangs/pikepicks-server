@@ -107,11 +107,11 @@
                             </button>
                             <br><br>
 
-                            <div class="alert alert-info" role="alert">Mega evolutions and alternate forms are not
-                                currently
-                                supported and will be reverted to their regular sprite. Some pokemon may result in
-                                MissingNo.
-                            </div>
+                            <%--<div class="alert alert-info" role="alert">Mega evolutions and alternate forms are not--%>
+                                <%--currently--%>
+                                <%--supported and will be reverted to their regular sprite. Some pokemon may result in--%>
+                                <%--MissingNo.--%>
+                            <%--</div>--%>
                         </form>
                     </div>
                     <div class="col-sm-8">
@@ -134,11 +134,11 @@
                             <pre>
 [
     {
-        "name": "personName",
+        "text": "personName",
         "pokemon": "pikachu"
     },
     {
-        "name": "personName",
+        "text": "personName",
         "regions": "kanto,hoenn"
     }
 ]</pre>

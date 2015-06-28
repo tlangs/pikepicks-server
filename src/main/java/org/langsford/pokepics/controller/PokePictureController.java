@@ -1,15 +1,13 @@
 package org.langsford.pokepics.controller;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import org.langsford.pokepics.enumeration.Region;
 import org.langsford.pokepics.service.PokePictureService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.ResponseBody;
+import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.servlet.ModelAndView;
 
@@ -22,6 +20,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URLDecoder;
 import java.util.*;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -32,8 +31,11 @@ import java.util.zip.ZipOutputStream;
 @RequestMapping("/")
 public class PokePictureController {
 
+    @Autowired
+    private ObjectMapper objectMapper;
     private PokePictureService pokePictureService;
     private Map<String, Integer> nameIdMap;
+
 
 
     @Autowired
@@ -81,26 +83,34 @@ public class PokePictureController {
     @ResponseBody
     public byte[] bulkUpload(@RequestParam String bulkInput, HttpServletResponse response)
             throws IOException {
+        byte[] output;
         List<MemoryFile> files = new ArrayList<>();
-        byte[] output = new byte[0];
-        JSONArray array = new JSONArray(URLDecoder.decode(bulkInput, "UTF-8"));
-        for (int i = 0; i < array.length(); i++) {
-            JSONObject object = array.getJSONObject(i);
-            String name = object.has("name") ? object.getString("name") : "";
-            String pokemon = object.has("pokemon") ? object.getString("pokemon") : "";
-            String[] regionStrings = object.has("regions") ? object.getString("regions").split(",") : new String[]{};
-            Region[] regions = new Region[regionStrings.length];
+        List inputs = objectMapper.readValue(bulkInput, List.class);
+        int cnt = 0;
+        for (Object input : inputs) {
+            Map map = (Map) input;
+            String text = map.get("text") != null ? (String) map.get("text") : "";
+            String pokemon = map.get("pokemon") != null ? (String) map.get("pokemon") : "";
+            Integer nationalId = nameIdMap.get(pokemon.toLowerCase());
+            String regionsString = map.get("regions") != null ? (String) map.get("regions") : "";
+            List<String> regionStrings = Arrays.asList(regionsString.split(","))
+                    .stream().map(String::toUpperCase).collect(Collectors.toList());
+            List<Region> regions = new ArrayList<>();
             for (String s : regionStrings) {
-                Region.valueOf(s.toUpperCase());
+                try {
+                    regions.add(Region.valueOf(s));
+                } catch(IllegalArgumentException e) {
+                    System.out.println(e.getMessage());
+                }
             }
-            byte[] barray = this.pokeImage(name, nameIdMap.get(pokemon.toLowerCase()), regions);
+            byte[] barray = pokeImage(text, nationalId, regions.toArray(new Region[regions.size()]));
+
             MemoryFile mfile = new MemoryFile();
             mfile.contents = barray;
-            mfile.fileName = (name.equals("") ? i : name) + ".png";
+            mfile.fileName = (text.equals("") ? cnt++ : text) + ".png";
             files.add(mfile);
         }
         output = createZipByteArray(files);
-
         response.setHeader("Content-Disposition", "filename=bulk.zip");
         return output;
     }
@@ -120,9 +130,8 @@ public class PokePictureController {
                 if (!filenames.contains(memoryFile.fileName)) {
                     zipEntry = new ZipEntry(memoryFile.fileName);
                 } else {
-                    zipEntry = new ZipEntry(
-                            Collections.frequency(filenames, memoryFile.fileName) + memoryFile.fileName
-                    );
+                    zipEntry = new ZipEntry(Collections.frequency(filenames, memoryFile.fileName)
+                            + "-" +  memoryFile.fileName);
                 }
                 filenames.add(memoryFile.fileName);
                 zipOutputStream.putNextEntry(zipEntry);
@@ -139,12 +148,12 @@ public class PokePictureController {
     @RequestMapping(value = "/makepokemon", method = RequestMethod.GET, produces = "image/png")
     @ResponseBody
     public byte[] pokeImage(@RequestParam(value = "text", required = true, defaultValue = "") String text,
-                            @RequestParam(value = "pokemon", required = false) Integer pokemon,
+                            @RequestParam(value = "nationalId", required = false) Integer nationalId,
                             @RequestParam(value = "regions", required = false) Region[] regions) {
         BufferedImage returnImage;
 
-        if (pokemon != null) {
-            returnImage = pokePictureService.makeImageForPokemon(pokemon, text);
+        if (nationalId != null) {
+            returnImage = pokePictureService.makeImageForPokemon(nationalId, text);
         } else {
             returnImage = pokePictureService.makeRandomImage(text, regions);
         }
@@ -155,6 +164,11 @@ public class PokePictureController {
             e.printStackTrace();
         }
         return outputStream.toByteArray();
+    }
+
+    @ExceptionHandler(IOException.class)
+    public String handleIOException(IOException ex) {
+        return ex.getMessage();
     }
 
 }

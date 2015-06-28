@@ -37,7 +37,7 @@ $("#submitPokeForm").click(function() {
 
     var url = "makepokemon?" + $.param({
         text: $("#inputText").val(),
-        pokemon: $("#inputPokemon").chosen().val(),
+        nationalId: $("#inputPokemon").chosen().val(),
         regions: regions,
         change: Math.random()
     });
