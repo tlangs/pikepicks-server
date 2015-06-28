@@ -1,10 +1,8 @@
 package org.langsford.pokepics.controller;
 
-import org.apache.commons.lang3.text.WordUtils;
 import org.json.JSONArray;
 import org.json.JSONObject;
-import org.langsford.pokepics.dto.Pokemon;
-import org.langsford.pokepics.dto.PokemonDisplay;
+import org.langsford.pokepics.enumeration.Region;
 import org.langsford.pokepics.service.PokePictureService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
@@ -23,10 +21,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.net.URLDecoder;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipOutputStream;
 
@@ -37,27 +32,32 @@ import java.util.zip.ZipOutputStream;
 @RequestMapping("/")
 public class PokePictureController {
 
-    @Autowired
     private PokePictureService pokePictureService;
+    private Map<String, Integer> nameIdMap;
+
+
+    @Autowired
+    public PokePictureController(PokePictureService pokePictureService) {
+        this.pokePictureService = pokePictureService;
+        Map<Integer, String> idNameMap = pokePictureService.getPokemonIdNames();
+        this.nameIdMap = new HashMap<>();
+        for (Map.Entry<Integer, String> entry : idNameMap.entrySet()) {
+            this.nameIdMap.put(entry.getValue(), entry.getKey());
+        }
+    }
 
     @RequestMapping(method = RequestMethod.GET)
     public ModelAndView pokePage() {
         ModelAndView mav = new ModelAndView("poke");
-        List<PokemonDisplay> pokeNames = new ArrayList<>();
-        for (Map.Entry<Integer, Pokemon> entry : pokePictureService.getPokemonIdMap().entrySet()) {
-            PokemonDisplay pd = new PokemonDisplay();
-            pd.setName(WordUtils.capitalize(entry.getValue().getName(), ' ', '-'));
-            pd.setValue(entry.getValue().getName());
-            pokeNames.add(pd);
-        }
-        mav.addObject("pokemonList", pokeNames);
+        mav.addObject("pokemonList", pokePictureService.getAvailablePokemon());
         return mav;
     }
 
-    @RequestMapping(value="/fileupload", method= RequestMethod.POST, produces = "application/zip")
-    public @ResponseBody
+    @RequestMapping(value = "/fileupload", method = RequestMethod.POST, produces = "application/zip")
+    public
+    @ResponseBody
     byte[] handleFileUpload(@RequestParam("fileUpload") MultipartFile file,
-                                                 HttpServletResponse response) {
+                            HttpServletResponse response) {
         byte[] output = new byte[0];
         if (!file.isEmpty()) {
             try {
@@ -79,30 +79,28 @@ public class PokePictureController {
 
     @RequestMapping(value = "/bulkupload", method = RequestMethod.GET, produces = "application/zip")
     @ResponseBody
-    public byte[] bulkUpload(@RequestParam String bulkInput, HttpServletResponse response) {
+    public byte[] bulkUpload(@RequestParam String bulkInput, HttpServletResponse response)
+            throws IOException {
         List<MemoryFile> files = new ArrayList<>();
         byte[] output = new byte[0];
-        try {
-            JSONArray array = new JSONArray(URLDecoder.decode(bulkInput, "UTF-8"));
-            for (int i = 0; i < array.length(); i++) {
-                JSONObject object = array.getJSONObject(i);
-                String name = object.has("name") ? object.getString("name") : "";
-                String pokemon = object.has("pokemon") ? object.getString("pokemon") : "";
-                String regions = object.has("regions") ? object.getString("regions") : "";
-                byte[] barray = this.pokeImage(name, pokemon, regions);
-                MemoryFile mfile = new MemoryFile();
-                mfile.contents = barray;
-                mfile.fileName = (name.equals("") ? i : name) + ".png";
-                files.add(mfile);
+        JSONArray array = new JSONArray(URLDecoder.decode(bulkInput, "UTF-8"));
+        for (int i = 0; i < array.length(); i++) {
+            JSONObject object = array.getJSONObject(i);
+            String name = object.has("name") ? object.getString("name") : "";
+            String pokemon = object.has("pokemon") ? object.getString("pokemon") : "";
+            String[] regionStrings = object.has("regions") ? object.getString("regions").split(",") : new String[]{};
+            Region[] regions = new Region[regionStrings.length];
+            for (String s : regionStrings) {
+                Region.valueOf(s.toUpperCase());
             }
-        } catch (Exception e) {
-            e.printStackTrace();
+            byte[] barray = this.pokeImage(name, nameIdMap.get(pokemon.toLowerCase()), regions);
+            MemoryFile mfile = new MemoryFile();
+            mfile.contents = barray;
+            mfile.fileName = (name.equals("") ? i : name) + ".png";
+            files.add(mfile);
         }
-        try {
-            output = createZipByteArray(files);
-        } catch (Exception e) {
-            e.printStackTrace();
-        }
+        output = createZipByteArray(files);
+
         response.setHeader("Content-Disposition", "filename=bulk.zip");
         return output;
     }
@@ -140,13 +138,16 @@ public class PokePictureController {
 
     @RequestMapping(value = "/makepokemon", method = RequestMethod.GET, produces = "image/png")
     @ResponseBody
-    public byte[] pokeImage(@RequestParam(value = "name", required = true, defaultValue = "") String name,
-                            @RequestParam(value = "pokemon", required = true, defaultValue = "") String pokemon,
-                            @RequestParam(value = "regions", required = true, defaultValue = "") String regions) {
+    public byte[] pokeImage(@RequestParam(value = "text", required = true, defaultValue = "") String text,
+                            @RequestParam(value = "pokemon", required = false) Integer pokemon,
+                            @RequestParam(value = "regions", required = false) Region[] regions) {
+        BufferedImage returnImage;
 
-        pokemon = pokemon.toLowerCase().trim();
-
-        BufferedImage returnImage = pokePictureService.getSprite(name, pokemon, regions);
+        if (pokemon != null) {
+            returnImage = pokePictureService.makeImageForPokemon(pokemon, text);
+        } else {
+            returnImage = pokePictureService.makeRandomImage(text, regions);
+        }
         ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
         try {
             ImageIO.write(returnImage, "png", outputStream);
@@ -155,6 +156,5 @@ public class PokePictureController {
         }
         return outputStream.toByteArray();
     }
-
 
 }

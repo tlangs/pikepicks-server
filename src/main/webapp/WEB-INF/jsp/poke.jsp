@@ -50,7 +50,7 @@
                                     <option value=""></option>
                                     <option value="">Random Pokemon</option>
                                     <c:forEach var="pokemon" items="${pokemonList}">
-                                        <option value="${pokemon.getValue()}">${pokemon.getName()}</option>
+                                        <option value="${pokemon.nationalId}">${pokemon.name}</option>
                                     </c:forEach>
                                 </select>
                             </div>
